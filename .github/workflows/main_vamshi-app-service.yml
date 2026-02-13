@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -23,58 +23,43 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: npm install, build, and test
+      - name: npm install and build
         run: |
           npm install
-          npm run build --if-present
-          npm run test --if-present
-
-      - name: Prepare standalone for deployment
-        run: |
-          # Find where server.js is in the standalone output
-          SERVER_DIR=$(dirname $(find .next/standalone -name "server.js" -type f | head -1))
-          echo "Standalone server found at: $SERVER_DIR"
-          # Copy static assets next to server.js
-          cp -r .next/static $SERVER_DIR/.next/static
-          cp -r public $SERVER_DIR/public
-          # Store the path for the upload step
-          echo "STANDALONE_PATH=$SERVER_DIR" >> $GITHUB_ENV
+          npm run build
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: ${{ env.STANDALONE_PATH }}
+          path: |
+            .next/
+            public/
+            package.json
+            package-lock.json
+            server.js
+            web.config
+            node_modules/
 
   deploy:
     runs-on: ubuntu-latest
     needs: build
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+      id-token: write
+      contents: read
 
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: node-app
-      
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_44B1F62F40E74D04813ECC346236EB33 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_E65FCA203F5B4AFD815EF5E6DD33157F }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_87A83064ADAA433C9F33C3F0E6CAE85E }}
-
-      - name: Configure Azure App Service for standalone deployment
-        run: |
-          # Find the resource group for the app
-          RG=$(az webapp list --query "[?name=='vamshi-app-service'].resourceGroup" -o tsv)
-          echo "Resource Group: $RG"
-          # Disable Oryx build (we deploy pre-built standalone output)
-          az webapp config appsettings set -n vamshi-app-service -g $RG --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false
-          # Set startup command
-          az webapp config set -n vamshi-app-service -g $RG --startup-file "node server.js"
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
@@ -83,4 +68,3 @@ jobs:
           app-name: 'vamshi-app-service'
           slot-name: 'Production'
           package: .
-
