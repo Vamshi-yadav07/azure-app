@@ -66,6 +66,16 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_E65FCA203F5B4AFD815EF5E6DD33157F }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_87A83064ADAA433C9F33C3F0E6CAE85E }}
 
+      - name: Configure Azure App Service for standalone deployment
+        run: |
+          # Find the resource group for the app
+          RG=$(az webapp list --query "[?name=='vamshi-app-service'].resourceGroup" -o tsv)
+          echo "Resource Group: $RG"
+          # Disable Oryx build (we deploy pre-built standalone output)
+          az webapp config appsettings set -n vamshi-app-service -g $RG --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false
+          # Set startup command
+          az webapp config set -n vamshi-app-service -g $RG --startup-file "node server.js"
+
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
@@ -73,4 +83,4 @@ jobs:
           app-name: 'vamshi-app-service'
           slot-name: 'Production'
           package: .
-          
+
